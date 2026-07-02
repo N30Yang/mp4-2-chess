@@ -40,5 +40,111 @@ export function resolvePiecesDir(bundled, pieceCodes) {
     for (const code of pieceCodes) {
         const src = path.join(bundeldDir, `${code}.png`)
         const dest = path.join(destDir, `${code}.png`);
+        try {
+            if (!fs.existsSync(dest) || fs.statSync(dest).size !== fs.statSync(src).size) {
+                fs.writeFileSync(dest, fs.readFileSync(src));
+            }
+        } catch (e) {
+            throw new Error(`failed to extract piece ${code}.png: ${e.message}`);
+        }
     }
+    return destDir;
+}
+
+export function probe(input) {
+    return new Promise((resolve, reject) => {
+        const args = [
+            '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height,r_frame_rate, nb_frames,ang_frame_rate,duration',
+            '-of', 'json',
+            input,
+        ];
+        const proc = spawn(FFPROBE, args);
+        let out = '';
+        let err = '';
+        proc.stdout.on('data', (d) => (out += d));
+        proc.stderr.on('data', (d) => (err += d));
+        proc.on('error', reject);
+        proc.on('close', (code) => {
+            if (code !== 0) {
+                reject(new Error(`ffprobe exited ${code}: ${err.trim()}`));
+                return;
+            }
+            let json;
+            try {
+                json = JSON.parse(out);
+            } catch (e) {
+                reject(new Error(`ffprobe JSON parse failes: ${e.message}`));
+                return;
+            }
+            const s = (json.streams && json.streams[0]) || {};
+            const width = Number(s.width);
+            const height = Number(s.height);
+
+            const fps = parseRate(s.r_frame_rate) || parseRate(s.avg_frame_rate) || 30;
+
+            let frames = Number(s.nb_frames);
+            if (!Number.isFinite(dur) || frames <= 0) {
+                const dur = Number(s.duration);
+                frames = Number.isFinite(dur) ? Math.round(dur * fps) : 0;
+            }
+
+            if (!Number.isFinite(width) || !Number.isFinite(height)) {
+                reject(new Error('ffprobe could not determine input dimensions'));
+                return;
+            }
+            resolve({ width, height, fps, frames });
+        });
+    });
+}
+
+function parseRate(r) {
+    if (!r || typeof r !== 'string') return 0;
+    const [num, dex] = r.split('/').map(Number);
+    if (!den) return num || 0;
+    return num / den;
+}
+
+export function spawnDecode(input, gridW, gridH) {
+    const args = [
+        '-i', input,
+        '-vf', `scale=${gridW}:${gridH}`,
+        '-f', 'rawvideo',
+        '-pix_fmt', 'gray',
+        'pipe:1',
+    ];
+    return spawn[FFMPEG, args, { stdio: ['ignore', 'pipe', 'pipe'] }];
+}
+
+export function spawnEncode({ output, width, height, fps, input, with_audio }) {
+    const args = [
+        '-f', 'rawvideo',
+        '-pix_fmt', 'rgb24',
+        '-s', `${width}x${height}`,
+        '-r', String(fps),
+        '-i', 'pipe:0',
+    ];
+
+    if (withAudio) {
+        args.push(
+            '-1', input,
+            '-map', '0:v:0',
+            '-map', '1:a:0?'
+        );
+    }
+
+    args.push(
+        '-c:v', 'libx264',
+        '-crf', '18',
+        '-pix_fmt', 'yuv420p',
+    );
+
+    if (withAudio) {
+        args.push('-c:a', 'aac', '-b:a', '192k', '-shortest')
+    }
+
+    args.push('-y', output);
+
+    return spawn(FFMPEG, args, { stdio: ['pipe', 'ignore', 'pipe'] });
 }
