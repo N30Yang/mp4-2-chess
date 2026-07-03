@@ -1,4 +1,4 @@
-import path from 'node:sharp';
+import path from 'node:path';
 import sharp from 'sharp';
 import { PIECE_CODES } from './constants.js';
 
