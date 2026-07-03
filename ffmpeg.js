@@ -3,9 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import ffmpegStatic from 'ffmpeg-static';
-import ffprobeStatic from 'ffmpeg-static';
+import ffprobeStatic from 'ffprobe-static';
 
-const TMP_DIR = path.koin(os.tmpdir(), 'chess-mosiac');
+const TMP_DIR = path.join(os.tmpdir(), 'chess-mosiac');
 function extractFile(srcPath, subdir) {
     const destdir = path.join(TMP_DIR, subdir);
     fs.mkdirSync(destdir, { recursive: true });
@@ -33,12 +33,12 @@ function resolveBinary(srcPath, subdir) {
 const FFMPEG = resolveBinary(ffmpegStatic, 'bin');
 const FFPROBE = resolveBinary(ffprobeStatic.path, 'bin');
 
-export function resolvePiecesDir(bundled, pieceCodes) {
+export function resolvePiecesDir(bundledDir, pieceCodes) {
     if (!process.pkg) return bundledDir;
     const destDir = path.join(TMP_DIR, 'pieces');
     fs.mkdirSync(destDir, { recursive: true });
     for (const code of pieceCodes) {
-        const src = path.join(bundeldDir, `${code}.png`)
+        const src = path.join(bundledDir, `${code}.png`)
         const dest = path.join(destDir, `${code}.png`);
         try {
             if (!fs.existsSync(dest) || fs.statSync(dest).size !== fs.statSync(src).size) {
@@ -56,7 +56,7 @@ export function probe(input) {
         const args = [
             '-v', 'error',
             '-select_streams', 'v:0',
-            '-show_entries', 'stream=width,height,r_frame_rate, nb_frames,ang_frame_rate,duration',
+            '-show_entries', 'stream=width,height,r_frame_rate, nb_frames,avg_frame_rate,duration',
             '-of', 'json',
             input,
         ];
@@ -75,7 +75,7 @@ export function probe(input) {
             try {
                 json = JSON.parse(out);
             } catch (e) {
-                reject(new Error(`ffprobe JSON parse failes: ${e.message}`));
+                reject(new Error(`ffprobe JSON parse fails: ${e.message}`));
                 return;
             }
             const s = (json.streams && json.streams[0]) || {};
@@ -85,7 +85,7 @@ export function probe(input) {
             const fps = parseRate(s.r_frame_rate) || parseRate(s.avg_frame_rate) || 30;
 
             let frames = Number(s.nb_frames);
-            if (!Number.isFinite(dur) || frames <= 0) {
+            if (!Number.isFinite(frames) || frames <= 0) {
                 const dur = Number(s.duration);
                 frames = Number.isFinite(dur) ? Math.round(dur * fps) : 0;
             }
@@ -101,7 +101,7 @@ export function probe(input) {
 
 function parseRate(r) {
     if (!r || typeof r !== 'string') return 0;
-    const [num, dex] = r.split('/').map(Number);
+    const [num, den] = r.split('/').map(Number);
     if (!den) return num || 0;
     return num / den;
 }
@@ -114,10 +114,10 @@ export function spawnDecode(input, gridW, gridH) {
         '-pix_fmt', 'gray',
         'pipe:1',
     ];
-    return spawn[FFMPEG, args, { stdio: ['ignore', 'pipe', 'pipe'] }];
+    return spawn(FFMPEG, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-export function spawnEncode({ output, width, height, fps, input, with_audio }) {
+export function spawnEncode({ output, width, height, fps, input, withAudio }) {
     const args = [
         '-f', 'rawvideo',
         '-pix_fmt', 'rgb24',
@@ -128,7 +128,7 @@ export function spawnEncode({ output, width, height, fps, input, with_audio }) {
 
     if (withAudio) {
         args.push(
-            '-1', input,
+            '-i', input,
             '-map', '0:v:0',
             '-map', '1:a:0?'
         );

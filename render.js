@@ -6,6 +6,7 @@ export function renderFrame(grayFrame, tiles, lut, cell, gridW, gridH, outBuf) {
     for (let row = 0; row < gridH; row++) {
         for (let col = 0; col < gridW; col++) {
             const brightness = grayFrame[row * gridW + col];
+            const code = lut[brightness];
             const parity = (col + row) & 1;
             const tile = tiles[code][parity];
 
@@ -18,5 +19,6 @@ export function renderFrame(grayFrame, tiles, lut, cell, gridW, gridH, outBuf) {
             }
         }
     }
+
     return outBuf;
 }

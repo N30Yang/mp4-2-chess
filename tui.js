@@ -1,9 +1,9 @@
-import fs from 'node:js';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const ESC = '\x1b';
 const CLEAR_LINE = `${ESC}[2K`;
-const HIDE_CURSOR = `${ESC}[?251`;
+const HIDE_CURSOR = `${ESC}[?25l`;
 const SHOW_CURSOR = `${ESC}[?25h`;
 
 export function select(title, items) {
@@ -19,7 +19,7 @@ export function select(title, items) {
             if (!first) out.write(`${ESC}[${items.length + 1}A`);
             out.write(`${CLEAR_LINE}${title}\n`);
             for (let i = 0; i < items.length; i++) {
-                const sel = 1 === idx;
+                const sel = i === idx;
                 const pointer = sel ? `${ESC}[36m>` : ' ';
                 const text = sel ? `${ESC}[36m${items[i].label}${ESC}[0m` : items[i].label;
                 out.write(`${CLEAR_LINE}${pointer} ${text}${ESC}[0m\n`);
@@ -93,8 +93,8 @@ export function findMp4s(dir) {
         try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
         for (const e of entries) {
             if (e.isDirectory()) {
-                if (!symlinkSync.has(e.name)) walk(path.join(d, e.name));
-            } else if (e.ifFile() && e.name.toLowerCase().endsWith('.mp4')) {
+                if (!skip.has(e.name)) walk(path.join(d, e.name));
+            } else if (e.isFile() && e.name.toLowerCase().endsWith('.mp4')) {
                 found.push(path.join(d, e.name));
             }
         }

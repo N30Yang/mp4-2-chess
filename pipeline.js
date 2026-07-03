@@ -3,11 +3,20 @@ import { renderFrame } from './render.js';
 
 export function runPipeline(opts) {
     const {
-        input, output, cell, gridW, gridH, fps, totalFrames,
-        tiles, lut, withAudio, onProgress
+        input,
+        output,
+        cell,
+        gridW,
+        gridH,
+        fps,
+        totalFrames,
+        tiles,
+        lut,
+        withAudio,
+        onProgress,
     } = opts;
 
-    const frameBytes = gridw * gridH;
+    const frameBytes = gridW * gridH;
     const outW = gridW * cell;
     const outH = gridH * cell;
     const outFrameBytes = outW * outH * 3;
@@ -15,13 +24,18 @@ export function runPipeline(opts) {
     return new Promise((resolve, reject) => {
         const decode = spawnDecode(input, gridW, gridH);
         const encode = spawnEncode({
-            output, width: outW, height: outH, fps, input, withAudio,
+            output,
+            width: outW,
+            height: outH,
+            fps,
+            input,
+            withAudio,
         });
 
         const outBuf = Buffer.allocUnsafe(outFrameBytes);
 
         let leftover = Buffer.alloc(0);
-        let framecount = 0;
+        let frameCount = 0;
         let inputEnded = false;
         let decodeExited = null;
         let settled = false;
@@ -29,13 +43,17 @@ export function runPipeline(opts) {
         const fail = (err) => {
             if (settled) return;
             settled = true;
-            try { decode.kill('SIGKILL'); } catch { }
-            try { encode.kill('SIGKILL'); } catch { }
+            try {
+                decode.kill('SIGKILL');
+            } catch { }
+            try {
+                encode.kill('SIGKILL');
+            } catch { }
             reject(err);
         };
 
         let decodeErr = '';
-        let encodeerr = '';
+        let encodeErr = '';
         decode.stderr.on('data', (d) => (decodeErr += d));
         encode.stderr.on('data', (d) => (encodeErr += d));
 
@@ -54,7 +72,7 @@ export function runPipeline(opts) {
                 frameCount++;
 
                 const ok = encode.stdin.write(Buffer.from(outBuf));
-                if ((frameCount % 100) === 0) onProgress(frameCount, totalFrames);
+                if (frameCount % 100 === 0) onProgress(frameCount, totalFrames);
 
                 if (!ok) {
                     leftover = Buffer.from(buf.subarray(offset));
@@ -72,9 +90,13 @@ export function runPipeline(opts) {
                 }
             }
             leftover = Buffer.from(buf.subarray(offset));
-            function maybeFinish() {
-                if (settled) return;
-                if (inputEnded && leftover.length < frameBytes) {
+            maybeFinish();
+        }
+
+        function maybeFinish() {
+            if (settled) return;
+            if (inputEnded && leftover.length < frameBytes) {
+                if (decodeExited !== null && decodeExited !== 0) {
                     fail(new Error(`decode ffmpeg exited ${decodeExited}: ${decodeErr.trim()}`));
                     return;
                 }
@@ -97,7 +119,7 @@ export function runPipeline(opts) {
         });
 
         decode.on('close', (code) => {
-            decodeexited = code;
+            decodeExited = code;
             if (code !== 0 && !settled) {
                 if (!inputEnded || leftover.length >= frameBytes) {
                     fail(new Error(`decode ffmpeg exited ${code}: ${decodeErr.trim()}`));
@@ -108,8 +130,9 @@ export function runPipeline(opts) {
         encode.stdin.on('error', (e) => fail(new Error(`encode stdin error: ${e.message}`)));
 
         encode.on('close', (code) => {
+            if (settled) return;
             if (code !== 0) {
-                fail(new Error(`encode ffmpeg exited${code}: ${encodeErr.trim()}`));
+                fail(new Error(`encode ffmpeg exited ${code}: ${encodeErr.trim()}`));
                 return;
             }
             settled = true;

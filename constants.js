@@ -6,10 +6,10 @@ export const GRID_PRESETS = {
     fine: 64,
     ultra: 96,
 };
-export const DEFAULE_GRID = 'normal';
+export const DEFAULT_GRID = 'normal';
 export const MAX_GRID = 512;
 
-export const RESOLUTIONs = {
+export const RESOLUTIONS = {
     low: 30,
     medium: 40,
     high: 60,
@@ -20,7 +20,7 @@ export const DEFAULT_RESOLUTION = 'high';
 export const PRESETS = {
     brown: ['#F0D9B5', '#B58863'],
     green: ['#EEEED2', '#769656'],
-    blue: ['#3DEE3E5', '#8CA2AD'],
+    blue: ['#3DE3E5', '#8CA2AD'],
     gray: ['#DCDCDC', '#808080'],
 };
 export const DEFAULT_PRESET = 'brown';

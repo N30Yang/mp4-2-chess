@@ -32,6 +32,6 @@ const codes = ['bk', 'bq', 'br', 'bb', 'bn', 'bp', 'wk', 'wq', 'wr', 'wb', 'wn',
 for (const code of codes) {
     const file = path.join(outDir, `${code}.png`);
     await sharp(svg(code)).png().toFile(file);
-    consle.log('wrote', file);
+    console.log('wrote', file);
 }
-consle.log('Done generating placeholder pieces.');
+console.log('Done generating placeholder pieces.');
