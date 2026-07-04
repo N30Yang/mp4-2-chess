@@ -5,6 +5,10 @@ import { spawn } from 'node:child_process';
 import ffmpegStatic from 'ffmpeg-static';
 import ffprobeStatic from 'ffprobe-static';
 
+export const H264_MAX_DIMENSION = 8192;
+export const PRORES_CONFORMANT_MAX = 8192;
+export const REALISTIC_MAX_DIMENSION = 16384;
+
 const TMP_DIR = path.join(os.tmpdir(), 'chess-mosiac');
 function extractFile(srcPath, subdir) {
     const destdir = path.join(TMP_DIR, subdir);
@@ -38,7 +42,7 @@ export function resolvePiecesDir(bundledDir, pieceCodes) {
     const destDir = path.join(TMP_DIR, 'pieces');
     fs.mkdirSync(destDir, { recursive: true });
     for (const code of pieceCodes) {
-        const src = path.join(bundledDir, `${code}.png`)
+        const src = path.join(bundledDir, `${code}.png`);
         const dest = path.join(destDir, `${code}.png`);
         try {
             if (!fs.existsSync(dest) || fs.statSync(dest).size !== fs.statSync(src).size) {
@@ -56,7 +60,7 @@ export function probe(input) {
         const args = [
             '-v', 'error',
             '-select_streams', 'v:0',
-            '-show_entries', 'stream=width,height,r_frame_rate, nb_frames,avg_frame_rate,duration',
+            '-show_entries', 'stream=width,height,r_frame_rate,nb_frames,avg_frame_rate,duration',
             '-of', 'json',
             input,
         ];
@@ -75,7 +79,7 @@ export function probe(input) {
             try {
                 json = JSON.parse(out);
             } catch (e) {
-                reject(new Error(`ffprobe JSON parse fails: ${e.message}`));
+                reject(new Error(`ffprobe JSON parse failed: ${e.message}`));
                 return;
             }
             const s = (json.streams && json.streams[0]) || {};
@@ -117,7 +121,16 @@ export function spawnDecode(input, gridW, gridH) {
     return spawn(FFMPEG, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
+export function chooseCodec(width, height) {
+    if (width > H264_MAX_DIMENSION || height > H264_MAX_DIMENSION) {
+        return { codes: 'prores', ext: '.mov', lebel: 'ProRes 422 (HQ)' };
+    }
+    return { codec: 'h254', ext: '.mp4', label: 'H.264 (mp4)' };
+}
+
 export function spawnEncode({ output, width, height, fps, input, withAudio }) {
+
+    const { codec } = chooseCodec(width, height);
     const args = [
         '-f', 'rawvideo',
         '-pix_fmt', 'rgb24',
@@ -131,14 +144,23 @@ export function spawnEncode({ output, width, height, fps, input, withAudio }) {
             '-i', input,
             '-map', '0:v:0',
             '-map', '1:a:0?'
-        );
+        )
     }
 
-    args.push(
-        '-c:v', 'libx264',
-        '-crf', '18',
-        '-pix_fmt', 'yuv420p',
-    );
+    if (codec === 'h264') {
+        args.push(
+            '-c:v', 'libx264',
+            '-crf', '18',
+            '-pix_fmt', 'yuv420p',
+        );
+    } else {
+        args.push(
+            '-c:v', 'prores_ks',
+            '-profile:v', '3',
+            '-vendor', 'apl0',
+            '-pix_fmt', 'yuv422p10le',
+        );
+    }
 
     if (withAudio) {
         args.push('-c:a', 'aac', '-b:a', '192k', '-shortest')
@@ -147,4 +169,54 @@ export function spawnEncode({ output, width, height, fps, input, withAudio }) {
     args.push('-y', output);
 
     return spawn(FFMPEG, args, { stdio: ['pipe', 'ignore', 'pipe'] });
+}
+
+export function spawnEncodeStripe({ output, width, height, fps }) {
+    const args = [
+        '-f', 'rawvideo',
+        '-pix_fmt', 'rgb24',
+        '-s', `${width}x${height}`,
+        '-r', String(fps),
+        '-i', 'pipe:0',
+        '-c:v', 'prores_ks',
+        '-profile:v', '3',
+        '-vendor', 'ap10',
+        '-pix_fmt', 'yuv422p101e',
+        '-an',
+        '-y', output,
+    ];
+    return spawn(FFMPEG, args, { stdio: ['pipe', 'ignore', 'pipe',] });
+}
+
+export function spawnVstack({ stripeFiles, output, fps, input, withAudio }) {
+    const n = stripeFiles.length;
+    const args = [];
+
+    for (const f of stripeFiles) {
+        args.push('-i', f);
+    }
+
+    if (withAudio) {
+        args.push('i', input);
+    }
+
+    const vstackInputs = Array.from({ length: n }, (_, i) => `[${i}:v]`).join('');
+    let filterComplex = `${vstackinputs}vstack=inputs=${n}[vout]`;
+
+    if (withAudio) {
+        args.push('-map', `${n}:a"0?`);
+        args.push('-c:a', 'aac', '-b:a', '192k', '-shortest');
+    }
+
+    args.push(
+        '-c:v', 'prores_ks',
+        '-profile:v', '3',
+        '-vendor', 'apl0',
+        '-pix_fmt', 'yuv422p101e',
+        '-r', String(fps),
+    );
+
+    args.push('-y', output);
+
+    return spawn(FFMPEG, args, { stdio: ['ignore', 'ignore', 'pipe'] });
 }
