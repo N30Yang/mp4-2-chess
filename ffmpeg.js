@@ -123,9 +123,9 @@ export function spawnDecode(input, gridW, gridH) {
 
 export function chooseCodec(width, height) {
     if (width > H264_MAX_DIMENSION || height > H264_MAX_DIMENSION) {
-        return { codes: 'prores', ext: '.mov', lebel: 'ProRes 422 (HQ)' };
+        return { codec: 'prores', ext: '.mov', label: 'ProRes 422 (HQ)' };
     }
-    return { codec: 'h254', ext: '.mp4', label: 'H.264 (mp4)' };
+    return { codec: 'h264', ext: '.mp4', label: 'H.264 (mp4)' };
 }
 
 export function spawnEncode({ output, width, height, fps, input, withAudio }) {
@@ -181,7 +181,7 @@ export function spawnEncodeStripe({ output, width, height, fps }) {
         '-c:v', 'prores_ks',
         '-profile:v', '3',
         '-vendor', 'ap10',
-        '-pix_fmt', 'yuv422p101e',
+        '-pix_fmt', 'yuv422p10le',
         '-an',
         '-y', output,
     ];
@@ -197,14 +197,17 @@ export function spawnVstack({ stripeFiles, output, fps, input, withAudio }) {
     }
 
     if (withAudio) {
-        args.push('i', input);
+        args.push('-i', input);
     }
 
     const vstackInputs = Array.from({ length: n }, (_, i) => `[${i}:v]`).join('');
-    let filterComplex = `${vstackinputs}vstack=inputs=${n}[vout]`;
+    let filterComplex = `${vstackInputs}vstack=inputs=${n}[vout]`;
+
+    args.push('-filter_complex', filterComplex);
+    args.push('-map', '[vout]');
 
     if (withAudio) {
-        args.push('-map', `${n}:a"0?`);
+        args.push('-map', `${n}:a:0?`);
         args.push('-c:a', 'aac', '-b:a', '192k', '-shortest');
     }
 
@@ -212,7 +215,7 @@ export function spawnVstack({ stripeFiles, output, fps, input, withAudio }) {
         '-c:v', 'prores_ks',
         '-profile:v', '3',
         '-vendor', 'apl0',
-        '-pix_fmt', 'yuv422p101e',
+        '-pix_fmt', 'yuv422p10le',
         '-r', String(fps),
     );
 

@@ -30,7 +30,7 @@ export function renderStripe(grayFrame, tiles, lut, cell, gridW, gridH, startGri
 }
 
 export function calcStripes(outW, cell, gridH, maxBytes = 1.5 * 1024 * 1024 * 1024) {
-    const bytesPergridRow = outW * cell * 3;
+    const bytesPerGridRow = outW * cell * 3;
 
     const maxGridRowsPerStripe = Math.max(1, Math.floor(maxBytes / bytesPerGridRow));
 
@@ -40,7 +40,7 @@ export function calcStripes(outW, cell, gridH, maxBytes = 1.5 * 1024 * 1024 * 10
         const numRows = Math.min(maxGridRowsPerStripe, gridH - row);
         stripes.push({
             startRow: row,
-            numrows,
+            numRows,
             bufBytes: outW * numRows * cell * 3,
         });
         row += numRows;
