@@ -280,6 +280,14 @@ async function runInteractive(opts) {
     return opts;
 }
 
+async function waitForExitOnWindows() {
+    if (process.platform === 'win32') {
+        console.log('\nPress Enter to exit...');
+        process.stdin.resume();
+        await new Promise(resolve => process.stdin.once('data', () => resolve()));
+    }
+}
+
 async function main() {
     let opts;
     try {
@@ -388,4 +396,13 @@ async function main() {
     }
 }
 
-main().then((code) => process.exit(code));
+main()
+    .then(async (code) => {
+        await waitForExitOnWindows();
+        process.exit(code);
+    })
+    .catch(async (e) => {
+        console.error(RED(`Fatal: ${e.message}`));
+        await waitForExitOnWindows();
+        process.exit(1);
+    });

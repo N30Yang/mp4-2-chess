@@ -78,5 +78,8 @@ Plain Node, no framework:
 
 AI helped with debugging and figuring out the ffmpeg/codec stuff, guidance not generated code.
 EXCEPT for recomended specs part, the Base code was all me but the actual text was ai as:
-A. I don't really know too much about Video rendering
-B. WAY TOO LONG, and i don't think anyone would actually read it much.
+
+* A. I don't really know too much about Video rendering
+* B. WAY TOO LONG, and i don't think anyone would actually read it much.
+
+Also used Ai to help with compiling, that was annoying.
