@@ -38,6 +38,16 @@ It'll warn you before doing a ProRes render because those files get HUGE and eat
 
 Run the Precompiled executable
 
+## the video file can be located in the same folder as the executable, or anywhere inside its parent directory tree.
+eg
+executable.exe
+input.mp4
+
+Or like
+
+executable.exe 
+╰input.mp4
+
 OR
 
 ```bash
