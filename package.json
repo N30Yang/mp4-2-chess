@@ -1,21 +1,20 @@
 {
-  "name": "chess-mosaic",
+  "name": "chess-to-mp4",
   "version": "1.0.0",
-  "description": "Convert an MP4 into a chess-piece mosaic video via ffmpeg + sharp",
+  "description": "Chess To MP4 convert an MP4 into a chess-piece video via ffmpeg + sharp",
   "type": "module",
   "bin": {
-    "chess-mosaic": "cli.js"
+    "chess-to-mp4": "cli.js"
   },
   "scripts": {
     "start": "node cli.js",
     "gen-pieces": "node scripts/gen-pieces.js",
-    "build:all": "pkg . --targets node18-macos-x64,node18-macos-arm64,node18-win-x64,node18-linux-x64 --out-path dist",
-    "build:mac": "pkg . --targets node18-macos-arm64 --output dist/chess-mosaic-macos",
-    "build:win": "pkg . --targets node18-win-x64 --output dist/chess-mosaic-win.exe",
-    "build:linux": "pkg . --targets node18-linux-x64 --output dist/chess-mosaic-linux"
+    "build:all": "pkg . --targets node20-macos-x64,node20-macos-arm64,node20-win-x64,node20-linux-x64 --out-path dist",
+    "build:win": "pkg . --targets node20-win-x64 --output dist/chess-to-mp4-win.exe",
+    "build:linux": "pkg . --targets node20-linux-x64 --output dist/chess-to-mp4-linux"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "pkg": {
     "assets": [
@@ -25,10 +24,8 @@
       "node_modules/@img/**/*"
     ],
     "targets": [
-      "node18-macos-x64",
-      "node18-macos-arm64",
-      "node18-win-x64",
-      "node18-linux-x64"
+      "node20-win-x64",
+      "node20-linux-x64"
     ],
     "outputPath": "dist"
   },
