@@ -1,7 +1,36 @@
-import { spawnDecode, spawnEncode } from './ffmpeg.js';
-import { renderFrame } from './render.js';
+import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnDecode, spawnEncodeStripe, spawnVstack } from './ffmpeg.js';
+import { renderStripe, calcStripes } from './render.js';
 
-export function runPipeline(opts) {
+function makeTempdir() {
+    const dir = path.join(os.tmpdir(), `chess-stripes-${Date.now()}-${process.pid}`);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
+function cleanupTempDir(dir) {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+}
+
+function encodeStripePromise(proc, label) {
+    return new Promise((resolve, reject) => {
+        let stderr = '';
+        proc.stderr.on('data', (d) => (stderr += d));
+        proc.on('error', (e) => reject(new Error(`${label} spawn failed: ${e.message}`)));
+        proc.on('close', (code) => {
+            if (code !== 0) {
+                reject(new Error(`${label} exited ${code}: ${stderr.trim()}`));
+            } else {
+                resolve();
+            }
+        });
+    });
+}
+
+
+export function runStripePipeline(opts) {
     const {
         input,
         output,
@@ -16,23 +45,37 @@ export function runPipeline(opts) {
         onProgress,
     } = opts;
 
-    const frameBytes = gridW * gridH;
     const outW = gridW * cell;
-    const outH = gridH * cell;
-    const outFrameBytes = outW * outH * 3;
+    const frameBytes = gridW * gridH;
+
+    const stripes = calcStripes(outW, cell, gridH);
+    const numStripes = stripes.length;
 
     return new Promise((resolve, reject) => {
-        const decode = spawnDecode(input, gridW, gridH);
-        const encode = spawnEncode({
-            output,
-            width: outW,
-            height: outH,
-            fps,
-            input,
-            withAudio,
+        const tmpDir = makeTempdir();
+
+        const stripeBufs = stripes.map((s) => Buffer.allocUnsafe(s.bufBytes));
+        const stripeFiles = stripes.map((_, i) => path.join(tmpDir, `stripe_${i}.mov`));
+        const encoders = stripes.map((s, i) =>
+            spawnEncodeStripe({
+                output: stripeFiles[i],
+                width: outW,
+                height: s.numRows * cell,
+                fps,
+            }),
+        );
+
+        const encodeErrors = encoders.map((enc, i) => {
+            let buf = '';
+            enc.stderr.on('data', (d) => (buf += d));
+            return { buf: () => buf };
         });
 
-        const outBuf = Buffer.allocUnsafe(outFrameBytes);
+        const encodeFinished = encoders.map((enc, i) =>
+            encodeStripePromise(enc, `stripe-encoder-${i}`),
+        );
+
+        const decode = spawnDecode(input, gridW, gridH);
 
         let leftover = Buffer.alloc(0);
         let frameCount = 0;
@@ -43,22 +86,29 @@ export function runPipeline(opts) {
         const fail = (err) => {
             if (settled) return;
             settled = true;
-            try {
-                decode.kill('SIGKILL');
-            } catch { }
-            try {
-                encode.kill('SIGKILL');
-            } catch { }
+            try { decode.kill('SIGKILL'); } catch { }
+            for (const enc of encoders) {
+                try { enc.kill('SIGKILL'); } catch { }
+            }
+            cleanupTempDir(tmpDir);
             reject(err);
         };
 
         let decodeErr = '';
-        let encodeErr = '';
         decode.stderr.on('data', (d) => (decodeErr += d));
-        encode.stderr.on('data', (d) => (encodeErr += d));
+        decode.on('error', (e) => fail(new Error(`decode spawn failed; ${e.message}`)));
 
-        decode.on('error', (e) => fail(new Error(`decode spawn failed: ${e.message}`)));
-        encode.on('error', (e) => fail(new Error(`encode spawn failed: ${e.message}`)));
+        function processFrame(frame) {
+            for (let i = 0; i < numStripes; i++) {
+                const s = stripes[i];
+                renderStripe(frame, tiles, lut, cell, gridW, gridH, s.startRow, s.numRows, stripeBufs[i]);
+                const ok = encoders[i].stdin.write(Buffer.from(stripeBufs[i]));
+                if (!ok) {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         function drainFrames(chunk) {
             let buf = leftover.length ? Buffer.concat([leftover, chunk]) : chunk;
@@ -68,23 +118,23 @@ export function runPipeline(opts) {
                 const frame = buf.subarray(offset, offset + frameBytes);
                 offset += frameBytes;
 
-                renderFrame(frame, tiles, lut, cell, gridW, gridH, outBuf);
+                const ok = processFrame(frame);
                 frameCount++;
 
-                const ok = encode.stdin.write(Buffer.from(outBuf));
                 if (frameCount % 100 === 0) onProgress(frameCount, totalFrames);
 
                 if (!ok) {
                     leftover = Buffer.from(buf.subarray(offset));
                     decode.stdout.pause();
-                    encode.stdin.once('drain', () => {
+
+                    const drainPromises = encoders.map((enc) =>
+                        new Promise((res) => enc.stdin.once('drain', res)),
+                    );
+                    Promise.all(drainPromises).then(() => {
                         if (settled) return;
                         decode.stdout.resume();
-                        try {
-                            drainFrames(Buffer.alloc(0));
-                        } catch (e) {
-                            fail(e);
-                        }
+                        try { drainFrames(Buffer.alloc(0)); }
+                        catch (e) { fail(e); }
                     });
                     return;
                 }
@@ -100,7 +150,9 @@ export function runPipeline(opts) {
                     fail(new Error(`decode ffmpeg exited ${decodeExited}: ${decodeErr.trim()}`));
                     return;
                 }
-                encode.stdin.end();
+                for (const enc of encoders) {
+                    enc.stdin.end();
+                }
             }
         }
 
@@ -126,17 +178,38 @@ export function runPipeline(opts) {
                 }
             }
         });
+        Promise.all(encodeFinished)
+            .then(() => {
+                console.log(`\nAll ${numStripes} stripe(s) encoded. Stacking into final output...`);
+                const vstackProc = spawnVstack({
+                    stripeFiles,
+                    output,
+                    fps,
+                    input,
+                    withAudio,
+                });
+                let vstackErr = '';
+                vstackProc.stderr.on('data', (d) => (vstackErr += d));
+                vstackProc.on('error', (e) =>
+                    fail(new Error(`vstack spawn failed: ${e.message}`)),
+                );
+                vstackProc.on('close', (code) => {
+                    cleanupTempDir(tmpDir);
+                    if (settled) return;
+                    if (code !== 0) {
+                        fail(new Error(`vstack ffmpeg exited ${code}: ${vstackErr.trim()}`));
+                        return;
+                    }
+                    settled = true;
+                    resolve(frameCount);
+                });
+            })
+            .catch((err) => fail(err));
 
-        encode.stdin.on('error', (e) => fail(new Error(`encode stdin error: ${e.message}`)));
-
-        encode.on('close', (code) => {
-            if (settled) return;
-            if (code !== 0) {
-                fail(new Error(`encode ffmpeg exited ${code}: ${encodeErr.trim()}`));
-                return;
-            }
-            settled = true;
-            resolve(frameCount);
-        });
+        for (let i = 0; i < encoders.length; i++) {
+            encoders[i].stdin.on('error', (e) =>
+                fail(new Error(`stripe-encoder-${i} stdin error: ${e.message}`)),
+            );
+        }
     });
 }
