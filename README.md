@@ -17,6 +17,10 @@ Due to High resolution if you want to use ultra width and 4k pieces, the output 
 
 # 12K!
 
+Or if you max everything out (4k and 512 wide) 
+
+# 32K !!!!!!
+
 The H.264 (mp4) codec only really supports up to 8k, i used Apples ProRes which *technically* supports 32k but realstically up to 16k,
 
 Codec is picked automatically:
