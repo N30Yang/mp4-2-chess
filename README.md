@@ -38,6 +38,8 @@ It'll warn you before doing a ProRes render because those files get HUGE and eat
 
 Run the Precompiled executable
 
+## does not work on mac
+
 ## the video file can be located in the same folder as the executable, or anywhere inside its parent directory tree.
 eg
 executable.exe
