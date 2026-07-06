@@ -12,7 +12,7 @@ import { runPipeline } from './pipeline.js';
 import { runStripePipeline } from './pipeline.js';
 import { select, prompt, findMp4s } from './tui.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const scriptDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 const YELLOW = (s) => `\x1b[33m${s}\x1b[0m`;
 const RED = (s) => `\x1b[31m${s}\x1b[0m`;
 const BOLD = (s) => `\x1b[1m${s}\x1b[0m`;
@@ -367,7 +367,7 @@ async function main() {
         console.log(`Output ${output}`);
         console.log(`Precomputing tiles...`);
 
-        const piecesDir = resolvePiecesDir(path.join(__dirname, 'pieces'), PIECE_CODES);
+        const piecesDir = resolvePiecesDir(path.join(scriptDir, 'pieces'), PIECE_CODES);
         const tiles = await precomputeTiles(piecesDir, cell, colors);
         const lut = buildBrightnessLUT();
 
